@@ -8,7 +8,6 @@ struct Res {
     name: Option<String>,
 }
 
-
 #[::async_trait::async_trait]
 trait Foo: Sized + Send + Sync + 'static {
 
