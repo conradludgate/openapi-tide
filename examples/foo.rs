@@ -8,20 +8,45 @@ struct Res {
     name: Option<String>,
 }
 
+enum BarResponse {
+    SuccessResponse(Res),
+    NotFound(Res),
+    BadRequest,
+}
+
+impl Into<tide::Response> for BarResponse {
+    fn into(self) -> tide::Response {
+        match self {
+            BarResponse::SuccessResponse(r) => {
+                tide::Response::new(tide::StatusCode::Ok)
+                    .body_json(&r)
+                    .unwrap() 
+            },
+            BarResponse::NotFound(r) => {
+                tide::Response::new(tide::StatusCode::NotFound)
+                    .body_json(&r)
+                    .unwrap()
+            },
+            BarResponse::BadRequest => {
+                tide::Response::new(tide::StatusCode::BadRequest)
+            }
+        }
+    }
+}
+
 #[::async_trait::async_trait]
 trait Foo: Sized + Send + Sync + 'static {
 
     /// /bar
-    async fn bar(&self, body: Req, req: &tide::Request<Self>) -> tide::Result<(Res, tide::StatusCode)>;
+    async fn bar(&self, body: Option<Req>, req: &tide::Request<Self>) -> BarResponse;
 
     fn into_server(self) -> tide::Server<Self> {
         let mut app = tide::with_state(self);
 
         app.at("/bar").post(
             |mut req: tide::Request<Self>| async move {
-                let body: Req = req.body_json().await?;
-                let (resp, status) = req.state().bar(body, &req).await?;
-                Ok(tide::Response::new(status).body_json(&resp)?)
+                let body: Option<Req> = req.body_json().await.ok();
+                Ok(req.state().bar(body, &req).await)
             }
         );
         
@@ -35,11 +60,11 @@ struct Baz {
 
 #[::async_trait::async_trait]
 impl Foo for Baz {
-    async fn bar(&self, body: Req, _req: &tide::Request<Self>) -> tide::Result<(Res, tide::StatusCode)> {
-        if body.some {
-            Ok((Res{name: Some(self.name.clone())}, tide::StatusCode::Ok))
-        } else {
-            Ok((Res{name: None}, tide::StatusCode::NotFound))
+    async fn bar(&self, body: Option<Req>, _req: &tide::Request<Self>) -> BarResponse {
+        match body {
+            None => BarResponse::BadRequest,
+            Some(Req{some: true}) => BarResponse::SuccessResponse(Res{name: Some(self.name.clone())}),
+            Some(Req{some: false}) => BarResponse::NotFound(Res{name: None}),
         }
     }
 }
