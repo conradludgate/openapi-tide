@@ -8,26 +8,26 @@ struct Res {
     name: Option<String>,
 }
 
-enum BarResponse {
+enum BarResponses {
     SuccessResponse(Res),
     NotFound(Res),
     BadRequest,
 }
 
-impl Into<tide::Response> for BarResponse {
+impl Into<tide::Response> for BarResponses {
     fn into(self) -> tide::Response {
         match self {
-            BarResponse::SuccessResponse(r) => {
+            BarResponses::SuccessResponse(r) => {
                 tide::Response::new(tide::StatusCode::Ok)
                     .body_json(&r)
                     .unwrap() 
             },
-            BarResponse::NotFound(r) => {
+            BarResponses::NotFound(r) => {
                 tide::Response::new(tide::StatusCode::NotFound)
                     .body_json(&r)
                     .unwrap()
             },
-            BarResponse::BadRequest => {
+            BarResponses::BadRequest => {
                 tide::Response::new(tide::StatusCode::BadRequest)
             }
         }
@@ -38,7 +38,7 @@ impl Into<tide::Response> for BarResponse {
 trait Foo: Sized + Send + Sync + 'static {
 
     /// /bar
-    async fn bar(&self, body: Option<Req>, req: &tide::Request<Self>) -> BarResponse;
+    async fn bar(&self, body: Option<Req>, req: &tide::Request<Self>) -> BarResponses;
 
     fn into_server(self) -> tide::Server<Self> {
         let mut app = tide::with_state(self);
@@ -60,11 +60,11 @@ struct Baz {
 
 #[::async_trait::async_trait]
 impl Foo for Baz {
-    async fn bar(&self, body: Option<Req>, _req: &tide::Request<Self>) -> BarResponse {
+    async fn bar(&self, body: Option<Req>, _req: &tide::Request<Self>) -> BarResponses {
         match body {
-            None => BarResponse::BadRequest,
-            Some(Req{some: true}) => BarResponse::SuccessResponse(Res{name: Some(self.name.clone())}),
-            Some(Req{some: false}) => BarResponse::NotFound(Res{name: None}),
+            None => BarResponses::BadRequest,
+            Some(Req{some: true}) => BarResponses::SuccessResponse(Res{name: Some(self.name.clone())}),
+            Some(Req{some: false}) => BarResponses::NotFound(Res{name: None}),
         }
     }
 }
