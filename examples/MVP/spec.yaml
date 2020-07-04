@@ -1,0 +1,82 @@
+openapi: 3.0.0
+
+info:
+  title: Foo Spec
+  version: 0.0.1
+  description: The Foo API
+
+paths:
+  /bar:
+    post:
+      operationId: maybeGetName
+      description: Get Name if some is set to true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/req'
+
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/resp'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/resp'
+        404:
+          description: Not Found
+          headers:
+            X-Example-Header:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nothing:
+                    type: boolean
+                required:
+                  - nothing
+                description: Nothing
+        400:
+          description: Bad Request
+
+components:
+  schemas:
+    req:
+      type: object
+      properties:
+        some:
+          type: boolean
+      description: Whether maybeGetName should return name
+
+    resp:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+      description: Response for maybe get name
+
+    foobar:
+      type: object
+      properties:
+        baz:
+          type: object
+          properties:
+            qux:
+              type: string
+
+    enum_test:
+      type: string
+      enum:
+        - foo
+        - bar
+        - baz
+        - LOL
+        - Multiple words
