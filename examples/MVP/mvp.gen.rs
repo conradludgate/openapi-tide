@@ -3,30 +3,40 @@ mod server {
     pub mod components {
         pub mod schemas {
 
+            #[derive(::serde::Serialize, ::serde::Deserialize)]
             /// Whether maybeGetName should return name
             pub struct Req {
                 pub some: ::std::option::Option<bool>,
             }
 
+            #[derive(::serde::Serialize, ::serde::Deserialize)]
             /// Response for maybe get name
             pub struct Resp {
                 pub name: ::std::string::String,
             }
             
+            #[derive(::serde::Serialize, ::serde::Deserialize)]
             pub struct FoobarBaz {
                 pub qux: ::std::option::Option<::std::string::String>,
             }
         
+            #[derive(::serde::Serialize, ::serde::Deserialize)]
             pub struct Foobar {
                 pub baz: ::std::option::Option<FoobarBaz>,
             }
             
+            #[derive(::serde::Serialize, ::serde::Deserialize)]
             enum EnumTest {
-                Foo = "foo",
-                Bar = "bar",
-                Baz = "baz",
-                Lol = "LOL",
-                MultipleWords = "Multiple words",
+                #[serde(rename = "foo")]
+                Foo,
+                #[serde(rename = "bar")]
+                Bar,
+                #[serde(rename = "baz")]
+                Baz,
+                #[serde(rename = "LOL")]
+                Lol,
+                #[serde(rename = "Multiple words")]
+                MultipleWords,
             }
         }
     }
@@ -34,13 +44,14 @@ mod server {
     pub mod paths {
 
         /// /bar
-        pub mod Bar {
+        pub mod bar {
             /// maybeGetName
             /// POST: /bar
-            pub mod Post {
+            pub mod post {
                 /// Responses for maybeGetName
-                pub mod Responses {
+                pub mod responses {
                     /// Content for maybeGetName =>  404 (Not Found)
+                    #[derive(::serde::Serialize)]
                     pub struct ContentNotFound {
                         pub nothing: bool,
                     }
@@ -48,15 +59,15 @@ mod server {
                     /// Headers for maybeGetName =>  404 (Not Found)
                     pub struct HeadersNotFound {
                         /// X-Example-Header
-                        x_example_header: Option<String>,
+                        pub x_example_header: Option<String>,
                     }
 
                     /// Response for maybeGetName
                     pub enum Response {
                         /// 200 (Success) Response for maybeGetName - JSON Encoded
                         SuccessJSON(super::super::super::super::components::schemas::Resp),
-                        /// 200 (Success) Response for maybeGetName - YAML Encoded
-                        SuccessYAML(super::super::super::super::components::schemas::Resp),
+                        /// 200 (Success) Response for maybeGetName - MSGPACK Encoded
+                        SuccessMSGPACK(super::super::super::super::components::schemas::Resp),
                         /// 404 (Not Found) Response for maybeGetName
                         NotFound {
                             headers: HeadersNotFound,
@@ -67,21 +78,21 @@ mod server {
                     }
 
                     impl Response {
-                        fn encode(self) -> ::tide::Result {
+                        pub fn encode(self) -> ::tide::Result {
                             match self {
                                 Response::SuccessJSON(content) => {
-                                    let response = ::tide::Response::new(200);
-                                    response.set_body(::serde_json::to_vec(content)?);
+                                    let mut response = ::tide::Response::new(::tide::StatusCode::Ok);
+                                    response.set_body(::serde_json::to_vec(&content)?);
                                     Ok(response.set_mime(::openapi_tide::mime::APPLICATION_JSON))
                                 }
-                                Response::SuccessYAML(content) => {
-                                    let response = ::tide::Response::new(200);
-                                    response.set_body(::serde_yaml::to_vec(content)?);
-                                    Ok(response.set_mime(::openapi_tide::mime::APPLICATION_YAML))
+                                Response::SuccessMSGPACK(content) => {
+                                    let mut response = ::tide::Response::new(::tide::StatusCode::Ok);
+                                    response.set_body(::rmp_serde::to_vec(&content)?);
+                                    Ok(response.set_mime(::openapi_tide::mime::APPLICATION_MSGPACK))
                                 }
                                 Response::NotFound{headers, content} => {
-                                    let response = ::tide::Response::new(404);
-                                    response.set_body(::serde_json::to_vec(content)?);
+                                    let mut response = ::tide::Response::new(::tide::StatusCode::NotFound);
+                                    response.set_body(::serde_json::to_vec(&content)?);
                                     let response = match headers.x_example_header {
                                         Some(x_example_header) => response.set_header("X-Example-Header", x_example_header),
                                         _ => response,
@@ -89,7 +100,7 @@ mod server {
                                     Ok(response.set_mime(::openapi_tide::mime::APPLICATION_JSON))
                                 }
                                 Response::BadRequest => {
-                                    let response = ::tide::Response::new(400);
+                                    let response = ::tide::Response::new(::tide::StatusCode::NotFound);
                                     Ok(response)
                                 }
                             }
@@ -98,48 +109,50 @@ mod server {
                 }
 
                 /// Request for maybeGetName
-                pub mod Request {
-                    pub type Body = super::super::super::components::schemas::Req;
+                pub mod request {
+                    pub type Body = super::super::super::super::components::schemas::Req;
 
-                    pub fn decode<S>(req: &mut ::tide::Request<S>) -> tide::Result<(Body,)> {
-                        let content_type = req.content_type().ok_or(::tide::Error::new(400, "expected Content-Type header"))?;
+                    pub async fn decode<S>(req: &mut ::tide::Request<S>) -> tide::Result<(Body,)> {
+                        let content_type = req.as_ref().content_type().ok_or(::tide::Error::from_str(::tide::StatusCode::BadRequest, "expected Content-Type header"))?;
                         let body = match content_type.essence() {
                             "application/json" => {
-                                ::serde_json::from_slice(req.body_bytes()?)
+                                Ok(::serde_json::from_slice(&req.body_bytes().await?)?)
                             },
-                            _ => Err(::tide::Error::new(400, "unexpected Content-Type value"))
+                            _ => Err(::tide::Error::from_str(::tide::StatusCode::BadRequest, "unexpected Content-Type value"))
                         }?;
+
                         Ok((body,))
                     }
                 }
                 
-
+                #[::async_trait::async_trait]
                 pub trait Spec: Sized + Send + Sync + 'static {
-                    async fn maybeGetName(&self, body: Option<Request::Body>, req: &::tide::Request<Self>) -> ::tide::Result<Responses>;
+                    async fn maybe_get_name(&self, body: Option<request::Body>, req: &::tide::Request<Self>) -> ::tide::Result<responses::Response>;
                 }
 
                 pub async fn endpoint<'a, S>(mut req: ::tide::Request<S>) -> ::tide::Result where S: Spec {
-                    let (body,) = Request::decode(&mut req)?;
-                    super::super::Spec::maybeGetName(body, req.state(), &req).await?.encode()
+                    let (body,) = request::decode(&mut req).await?;
+                    Spec::maybe_get_name(req.state(), Some(body), &req).await?.encode()
                 }
             }
 
             pub fn add_route<S>(route: &mut ::tide::Route<S>) where S: Spec {
                 route
-                    .post(Post::endpoint)
+                    .post(post::endpoint)
+                    ;
             }
 
-            pub trait Spec: Post::Spec {}
+            pub trait Spec: post::Spec {}
         }
 
-        pub trait Spec: Bar::Spec {}
+        pub trait Spec: bar::Spec {}
     }
 
-    trait Spec: paths::Spec {
+    pub trait Spec: paths::Spec {
         fn into_server(self) -> tide::Server<Self> {
             let mut app = tide::with_state(self);
 
-            paths::Bar::add_route(&mut app.at("/bar"));
+            paths::bar::add_route(&mut app.at("/bar"));
             
             app
         }
@@ -156,36 +169,39 @@ struct Server {
 use server::components::schemas::*;
 
 #[::async_trait::async_trait]
-impl server::Spec for Server {
-    async fn maybeGetName(&self, body: Option<server::paths::Bar::Post::Request::Body>, req: &::tide::Request<Self>) -> ::tide::Result<server::paths::Bar::Post::Responses::Response> {
-        use server::paths::Bar::Post::Request::*;
-        use server::paths::Bar::Post::Responses::*;
+impl server::paths::bar::post::Spec for Server {
+    async fn maybe_get_name(&self, body: Option<server::paths::bar::post::request::Body>, req: &::tide::Request<Self>) -> ::tide::Result<server::paths::bar::post::responses::Response> {
+        use server::paths::bar::post::responses::*;
 
-        match body {
+        Ok(match body {
             None => Response::BadRequest,
-            Some(req) => if req.some {
-                Response::SuccessResponse(Resp {
-                    name: Some(self.name.clone())
+            Some(req) => if req.some.unwrap_or(false) {
+                Response::SuccessJSON(Resp {
+                    name: self.name.clone()
                 })
             } else {
                 Response::NotFound {
                     headers: HeadersNotFound {
                         x_example_header: Some("example header".to_string()),
                     },
-                    content: NotFound {
-                        name: None,
+                    content: ContentNotFound {
+                        nothing: true,
                     },
                 }
             },
-        }
+        })
     }
 }
+
+impl server::paths::bar::Spec for Server{}
+impl server::paths::Spec for Server{}
+impl server::Spec for Server{}
 
 #[async_std::main]
 async fn main() -> Result<(), std::io::Error> {
     println!("Launching server {} with version {}", server::TITLE, server::VERSION);
 
-    let server = Server{name: "foo".to_string()}.into_server();
+    let server = server::Spec::into_server(Server{name: "foo".to_string()});
     
     server.listen("127.0.0.1:3001").await?;
 

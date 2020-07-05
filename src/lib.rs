@@ -1,7 +1,10 @@
 pub use openapi_derive::derive_openapi as openapi;
 
-pub trait Decoder<S> {
-    async fn decode(req: &mut tide::Request<S>) -> tide::Result<Self>;
+pub use mime;
+
+#[::async_trait::async_trait]
+pub trait Decoder<'de, S>: Sized {
+    fn decode(req: &'de mut tide::Request<S>) -> tide::Result<Self>;
 }
 
 pub struct Params<T, U> {
@@ -9,15 +12,15 @@ pub struct Params<T, U> {
     query: U,
 }
 
-impl<S, T, U> Decoder<S> for Params<T, U> where T: PathDecoder, U: serde::Deserialize {
-    async fn decode(req: &mut tide::Request<T>) -> tide::Result<Self> {
+impl<'de, S, T, U> Decoder<'de, S> for Params<T, U> where T: PathDecoder<S>, U: serde::Deserialize<'de> {
+    fn decode(req: &'de mut tide::Request<S>) -> tide::Result<Self> {
         Ok(Self {
-            path: <T as PathDecoder>::path_decoder(req),
+            path: <T as PathDecoder<S>>::path_decoder(req)?,
             query: req.query()?,
         })
     }
 }
 
-pub trait PathDecoder<S> {
-    fn path_decoder(req: &mut tide::Request<T>) -> tide::Result<Self>;
+pub trait PathDecoder<S>: Sized {
+    fn path_decoder(req: &mut tide::Request<S>) -> tide::Result<Self>;
 }

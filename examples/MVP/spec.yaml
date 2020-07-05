@@ -23,7 +23,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/resp'
-            application/yaml:
+            application/msgpack:
               schema:
                 $ref: '#/components/schemas/resp'
         404:
